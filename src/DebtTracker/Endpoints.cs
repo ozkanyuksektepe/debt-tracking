@@ -99,11 +99,20 @@ public static class Endpoints
                 l.MonthlyInstallment = Finance.Annuity(l.Principal, l.InterestRate, l.TermMonths);
             l.PaidInstallments = Math.Clamp(l.PaidInstallments, 0, Math.Max(l.TermMonths, 0));
             return string.IsNullOrWhiteSpace(l.Name) ? "Kredi adı gerekli." :
-                   l.TermMonths <= 0 ? "Vade (ay) 0'dan büyük olmalı." : null;
+                   l.TermMonths <= 0 ? "Vade (ay) 0'dan büyük olmalı." :
+                   l.OpenedDate > l.FirstInstallmentDate ? "Açılış tarihi ilk taksit tarihinden sonra olamaz." : null;
         });
         MapCrud<CreditCard>(api, "/cards", db => db.Cards, c =>
         {
             c.Installments = [];
+            c.PaidAmount = Math.Max(0, c.PaidAmount);
+            // Kullanıcı güncel toplam borcu girer; dönem içi harcama ondan türetilir:
+            // güncel = dönem borcu + dönem içi − ödenen  ⇒  dönem içi = güncel − dönem borcu + ödenen
+            var unbilled = c.CurrentBalance - c.StatementBalance + c.PaidAmount;
+            if (unbilled < -0.005m)
+                return $"Güncel toplam borç, kalan dönem borcundan ({c.RemainingStatement:N2} TL) az olamaz. \"Bu dönem ödenen\" tutarını kontrol et.";
+            c.UnbilledAmount = Math.Max(0, unbilled);
+            c.RecalculateBalance();
             return string.IsNullOrWhiteSpace(c.Name) ? "Kart adı gerekli." :
                    c.StatementDay is < 1 or > 31 || c.DueDay is < 1 or > 31 ? "Gün 1-31 arasında olmalı." : null;
         });
@@ -147,13 +156,11 @@ public static class Endpoints
                 case TargetTypes.Card:
                     var card = await db.Cards.FindAsync(req.TargetId);
                     if (card is null) return Results.NotFound();
-                    p.Amount = req.Amount ?? card.StatementBalance;
-                    p.StatementDelta = Math.Min(p.Amount, card.StatementBalance);
-                    p.CurrentDelta = Math.Min(p.Amount, card.CurrentBalance);
-                    p.MinimumDelta = Math.Min(p.Amount, card.MinimumPayment);
-                    card.StatementBalance -= p.StatementDelta;
-                    card.CurrentBalance -= p.CurrentDelta;
-                    card.MinimumPayment -= p.MinimumDelta;
+                    // Ödeme "bu dönem ödenen" tutarına eklenir; güncel borç ondan hesaplanır.
+                    p.Amount = req.Amount ?? card.RemainingStatement;
+                    p.RemainingDelta = p.Amount;
+                    card.PaidAmount += p.Amount;
+                    card.RecalculateBalance();
                     p.TargetName = card.Name;
                     break;
 
@@ -201,9 +208,12 @@ public static class Endpoints
                     loan.PaidInstallments = Math.Max(0, loan.PaidInstallments - p.InstallmentCount);
                     break;
                 case TargetTypes.Card when await db.Cards.FindAsync(p.TargetId) is { } card:
+                    // Yeni model: ödenen tutardan düş. Eski model (delta alanları dolu): bakiyeleri geri ekle.
+                    card.PaidAmount = Math.Max(0, card.PaidAmount - p.RemainingDelta);
                     card.StatementBalance += p.StatementDelta;
-                    card.CurrentBalance += p.CurrentDelta;
                     card.MinimumPayment += p.MinimumDelta;
+                    card.UnbilledAmount += Math.Max(0, p.CurrentDelta - p.StatementDelta);
+                    card.RecalculateBalance();
                     break;
                 case TargetTypes.Other when await db.Others.FindAsync(p.TargetId) is { } other:
                     other.RemainingAmount += p.RemainingDelta;

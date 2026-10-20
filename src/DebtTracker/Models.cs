@@ -18,9 +18,14 @@ public class Loan : IEntity
     public decimal InterestRate { get; set; }
     public decimal MonthlyInstallment { get; set; }
     public int TermMonths { get; set; }
+    /// <summary>Kredinin kullandırıldığı (açılış) tarih. Eski kayıtlarda boş olabilir.</summary>
+    public DateOnly? OpenedDate { get; set; }
     public DateOnly FirstInstallmentDate { get; set; }
     public int PaidInstallments { get; set; }
     public string? Notes { get; set; }
+
+    /// <summary>Son taksit tarihi (bitiş); salt okunur, veritabanına yazılmaz.</summary>
+    public DateOnly? EndDate => TermMonths > 0 ? FirstInstallmentDate.AddMonths(TermMonths - 1) : null;
 }
 
 public class CreditCard : IEntity
@@ -29,15 +34,26 @@ public class CreditCard : IEntity
     public string Name { get; set; } = "";
     public string? Bank { get; set; }
     public decimal Limit { get; set; }
-    /// <summary>Son kesilen ekstrenin ödenmemiş kısmı.</summary>
+    /// <summary>Son kesilen ekstrenin tutarı (dönem borcu). Ödeme yapıldıkça değişmez.</summary>
     public decimal StatementBalance { get; set; }
-    /// <summary>Kartın güncel toplam borcu (ekstre + dönem içi harcamalar).</summary>
+    /// <summary>Bu ekstreye yapılan ödemelerin toplamı.</summary>
+    public decimal PaidAmount { get; set; }
+    /// <summary>Son ekstreden sonra yapılan, henüz ekstreye girmemiş harcamalar. Kayıtta girilen güncel borçtan türetilir.</summary>
+    public decimal UnbilledAmount { get; set; }
+    /// <summary>Güncel toplam borç. Formda kullanıcı girer; ödeme kaydında <see cref="RecalculateBalance"/> ile güncellenir.</summary>
     public decimal CurrentBalance { get; set; }
     public decimal MinimumPayment { get; set; }
     public int StatementDay { get; set; } = 1;
     public int DueDay { get; set; } = 10;
     public string? Notes { get; set; }
     public List<CardInstallment> Installments { get; set; } = [];
+
+    // Salt okunur hesaplanan alanlar: veritabanına yazılmaz, JSON'da döner.
+    public decimal RemainingStatement => Math.Max(0, StatementBalance - PaidAmount);
+    public decimal RemainingMinimum => Math.Max(0, MinimumPayment - PaidAmount);
+
+    /// <summary>Güncel borç = dönem borcu + dönem içi harcamalar − ödenen.</summary>
+    public void RecalculateBalance() => CurrentBalance = Math.Max(0, StatementBalance + UnbilledAmount - PaidAmount);
 }
 
 /// <summary>Kartla yapılan, henüz güncel borca yansımamış taksitli alışveriş.</summary>

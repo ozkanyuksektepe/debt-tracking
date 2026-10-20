@@ -1,4 +1,4 @@
-import { CreditCard, Gauge, Receipt, ShoppingBag, Wallet } from "lucide-react";
+import { CalendarCheck, CreditCard, Gauge, Receipt, Scissors, ShoppingBag, Wallet } from "lucide-react";
 import { Suspense } from "react";
 import { CardVisual } from "@/components/card-visual";
 import { DeleteButton, EntityFormButton } from "@/components/entity-buttons";
@@ -6,7 +6,7 @@ import { PayButton } from "@/components/payment-buttons";
 import { Badge, Card, DueBadge, Empty, Hint, Kpi, KpiGrid, PageHeader, PageSkeleton, Stat } from "@/components/ui";
 import { apiGet } from "@/lib/api";
 import { fmtDate, money } from "@/lib/format";
-import type { Overview } from "@/lib/types";
+import type { CardView, Overview } from "@/lib/types";
 
 export default function CardsPage() {
   return (
@@ -29,7 +29,7 @@ async function Cards() {
   return (
     <>
       <KpiGrid>
-        <Kpi label="Dönem borçları" value={money(d.cardsStatementTotal)} icon={Receipt} tone="c2" sub="Bu ekstrelerde ödenecek" />
+        <Kpi label="Kalan dönem borçları" value={money(d.cardsStatementTotal)} icon={Receipt} tone="c2" sub="Bu ekstrelerden ödenecek kalan" />
         <Kpi label="Toplam kart borcu" value={money(d.cardsTotal)} icon={Wallet} tone="danger" sub="Gelecek taksitler dahil" />
         <Kpi label="Toplam limit" value={money(totalLimit)} icon={CreditCard} tone="accent" sub={`${d.cards.length} kart`} />
         <Kpi label="Kullanılabilir limit" value={money(available)} icon={Gauge} tone="ok"
@@ -46,22 +46,26 @@ async function Cards() {
                   <div className="flex flex-col gap-3">
                     <CardVisual c={c} />
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {c.isOverdue ? <Badge tone="danger">Ödeme gecikmiş</Badge> : x.statementBalance > 0 ? (
+                      {c.isOverdue ? <Badge tone="danger">Ödeme gecikmiş</Badge> : x.remainingStatement > 0 ? (
                         <><Badge tone="accent">Son ödeme {fmtDate(c.dueDate)}</Badge><DueBadge date={c.dueDate} today={d.today} /></>
                       ) : <Badge tone="ok">Dönem borcu ödendi</Badge>}
                     </div>
                   </div>
 
                   <div className="flex min-w-0 flex-col gap-4">
-                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                      <Stat label="Dönem borcu" tone={c.isOverdue ? "danger" : undefined}>{money(x.statementBalance)}</Stat>
-                      <Stat label="Asgari ödeme">{money(x.minimumPayment)}</Stat>
-                      <Stat label="Dönem içi harcama">{money(c.unbilledAmount)}</Stat>
+                    <StatementTimeline c={c} today={d.today} />
+
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+                      <Stat label="Dönem borcu">{money(x.statementBalance)}</Stat>
+                      <Stat label="Bu dönem ödenen" tone={x.paidAmount > 0 ? "ok" : undefined}>{money(x.paidAmount)}</Stat>
+                      <Stat label="Kalan dönem borcu" tone={c.isOverdue ? "danger" : undefined}>{money(x.remainingStatement)}</Stat>
+                      <Stat label="Kalan asgari ödeme">{money(x.remainingMinimum)}</Stat>
+                      <Stat label="Dönem içi harcama">{money(x.unbilledAmount)}</Stat>
+                      <Stat label="Güncel toplam borç">{money(x.currentBalance)}</Stat>
                       <Stat label="Gelecek taksitler">{money(c.futureInstallmentsTotal)}</Stat>
-                      <Stat label="Toplam borç">{money(c.totalDebt)}</Stat>
-                      <Stat label="Kullanılabilir">{money(c.availableLimit)}</Stat>
+                      <Stat label="Kullanılabilir limit" tone={c.availableLimit < 0 ? "danger" : undefined}>{money(c.availableLimit)}</Stat>
                       <Stat label="Limit">{money(x.limit)}</Stat>
-                      <Stat label="Sonraki ekstre">{fmtDate(c.nextStatementDate)}</Stat>
+                      <Stat label="Toplam borç">{money(c.totalDebt)}</Stat>
                     </div>
 
                     <div className="rounded-2xl border border-line">
@@ -89,7 +93,7 @@ async function Cards() {
                                 <tr key={i.installment.id} className="border-t border-line">
                                   <td className="px-4 py-2 font-medium">{i.installment.description}</td>
                                   <td className="px-2 py-2 text-right">{money(i.installment.monthlyAmount)}</td>
-                                  <td className="px-2 py-2 text-right text-muted">{i.remainingCount}/{i.installment.totalCount}</td>
+                                  <td className="px-2 py-2 text-right text-muted">{i.remainingCount}</td>
                                   <td className="px-2 py-2 text-right font-semibold">{money(i.remainingTotal)}</td>
                                   <td className="whitespace-nowrap px-2 py-1 text-right">
                                     <EntityFormButton resource="card-installments" values={i.installment} label="Taksidi düzenle" variant="ghost" small iconOnly />
@@ -111,11 +115,11 @@ async function Cards() {
                       {x.currentBalance > 0 && (
                         <PayButton primary label="Ödeme yap" accounts={d.accounts}
                           target={{
-                            type: "card", id: x.id, name: x.name, amount: x.statementBalance || null,
-                            hint: `Dönem borcu ${money(x.statementBalance)} · asgari ${money(x.minimumPayment)}`,
+                            type: "card", id: x.id, name: x.name, amount: x.remainingStatement || null,
+                            hint: `Kalan dönem borcu ${money(x.remainingStatement)} · kalan asgari ${money(x.remainingMinimum)}. Tutar "bu dönem ödenen"e eklenir.`,
                           }} />
                       )}
-                      <EntityFormButton resource="cards" values={x} label="Ekstreyi güncelle" small />
+                      <EntityFormButton resource="cards" values={{ ...x, futureInstallmentsTotal: c.futureInstallmentsTotal }} label="Ekstreyi güncelle" small />
                       <span className="ml-auto" />
                       <DeleteButton resource="cards" id={x.id} name={x.name} iconOnly />
                     </div>
@@ -125,8 +129,10 @@ async function Cards() {
             })}
           </div>
           <Hint>
-            Yeni ekstre kesildiğinde &quot;Ekstreyi güncelle&quot; ile dönem borcu, asgari ödeme ve güncel borcu bankandaki değerlerle güncelle.
-            Taksitli alışverişlere yalnızca henüz güncel borca yansımamış taksitleri ekle.
+            Dönem içi harcama, girdiğin güncel toplam borçtan; kullanılabilir limit de limit ve güncel borçtan otomatik hesaplanır.
+            &quot;Ödeme yap&quot; ile kaydettiğin ödemeler &quot;bu dönem ödenen&quot;e eklenir ve güncel borcu düşürür.
+            Yeni ekstre kesildiğinde &quot;Ekstreyi güncelle&quot; ile yeni dönem borcunu ve asgariyi gir, ödeneni sıfırla, güncel borcu bankadaki değerle güncelle.
+            Kullanılabilir limitten taksitli alışverişlerin kalan tutarı da düşülür.
           </Hint>
         </>
       ) : (
@@ -138,5 +144,42 @@ async function Cards() {
         </Card>
       )}
     </>
+  );
+}
+
+/** Hesap kesim ve son ödeme tarihlerini sırasıyla gösterir; geçmiş, sıradaki ve gecikmiş adımları ayırır. */
+function StatementTimeline({ c, today }: { c: CardView; today: string }) {
+  const steps = [
+    { label: "Son hesap kesim", date: c.lastStatementDate, due: false },
+    { label: "Son ödeme", date: c.dueDate, due: true },
+    { label: "Sonraki hesap kesim", date: c.nextStatementDate, due: false },
+    { label: "Sonraki son ödeme", date: c.nextDueDate, due: true },
+  ];
+  const nextIndex = steps.findIndex((s) => s.date >= today);
+
+  return (
+    <ol className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      {steps.map((s, i) => {
+        const past = s.date < today;
+        const overdue = past && s.due && i === 1 && c.isOverdue;
+        const isNext = i === nextIndex;
+        return (
+          <li key={s.label}
+            className={`rounded-2xl border px-3.5 py-2.5 ${
+              overdue ? "border-danger/30 bg-danger-soft" : isNext ? "border-accent/40 bg-accent-soft" : "border-line"
+            }`}>
+            <div className="flex items-center gap-1.5 text-[12px] text-muted">
+              {s.due ? <CalendarCheck className="size-3.5" /> : <Scissors className="size-3.5" />}
+              {s.label}
+            </div>
+            <div className={`mt-0.5 text-[14px] font-semibold ${overdue ? "text-danger" : isNext ? "text-accent" : past ? "text-muted" : ""}`}>
+              {fmtDate(s.date)}
+            </div>
+            {overdue && <div className="text-[11.5px] font-medium text-danger">Gecikmiş</div>}
+            {isNext && !overdue && <div className="text-[11.5px] font-medium text-accent">Sıradaki</div>}
+          </li>
+        );
+      })}
+    </ol>
   );
 }

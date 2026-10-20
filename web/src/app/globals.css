@@ -81,9 +81,10 @@
   --shadow-pop: var(--shadow-lg);
   /* İnternetsiz çalışması için sistem fontu kullanılır (macOS'ta SF Pro). */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
-  --animate-fade-up: fade-up .35s cubic-bezier(.2, .7, .3, 1) both;
-  --animate-pop: pop .18s cubic-bezier(.2, .7, .3, 1) both;
-  --animate-fade: fade .2s ease both;
+  /* "backwards": animasyon bitince transform kalmaz (aksi halde içindeki fixed öğeler karta göre konumlanır). */
+  --animate-fade-up: fade-up .35s cubic-bezier(.2, .7, .3, 1) backwards;
+  --animate-pop: pop .18s cubic-bezier(.2, .7, .3, 1) backwards;
+  --animate-fade: fade .2s ease backwards;
 }
 
 @keyframes fade-up {

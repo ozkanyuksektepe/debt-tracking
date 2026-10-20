@@ -53,7 +53,7 @@ public class Overview
     public decimal LoansRemainingTotal => Loans.Sum(l => l.RemainingTotal);
     public decimal LoansRemainingPrincipal => Loans.Sum(l => l.RemainingPrincipal);
     public decimal CardsTotal => Cards.Sum(c => c.TotalDebt);
-    public decimal CardsStatementTotal => Cards.Sum(c => c.Card.StatementBalance);
+    public decimal CardsStatementTotal => Cards.Sum(c => c.Card.RemainingStatement);
     public decimal OthersTotal => Others.Where(o => o.Debt.Kind == OtherKinds.Debt).Sum(o => o.Debt.RemainingAmount);
     public decimal TotalDebt => LoansRemainingTotal + CardsTotal + OthersTotal;
     public decimal TotalDebtPrincipalBased => LoansRemainingPrincipal + CardsTotal + OthersTotal;
@@ -145,7 +145,7 @@ public static class Finance
             var due = DueAfter(lastStatement, c.DueDay);
             var nextStatement = DayIn(lastStatement.AddMonths(1), c.StatementDay);
             var nextDue = DueAfter(nextStatement, c.DueDay);
-            var isOverdue = c.StatementBalance > 0 && due < today;
+            var isOverdue = c.RemainingStatement > 0 && due < today;
 
             var instViews = new List<InstallmentView>();
             var futureByMonth = new Dictionary<int, decimal>();
@@ -166,11 +166,11 @@ public static class Finance
                 instViews.Add(new InstallmentView(i, count, count * i.MonthlyAmount, last));
             }
             var futureTotal = instViews.Sum(v => v.RemainingTotal);
-            var unbilled = Math.Max(0, c.CurrentBalance - c.StatementBalance);
+            var unbilled = c.UnbilledAmount;
 
-            if (c.StatementBalance > 0)
-                items.Add(new CalendarItem(due, c.Name, "Kredi kartı", c.StatementBalance, false, isOverdue, true,
-                    TargetTypes.Card, c.Id, c.MinimumPayment > 0 ? $"Dönem borcu · asgari {c.MinimumPayment:N2} TL" : "Dönem borcu"));
+            if (c.RemainingStatement > 0)
+                items.Add(new CalendarItem(due, c.Name, "Kredi kartı", c.RemainingStatement, false, isOverdue, true,
+                    TargetTypes.Card, c.Id, c.RemainingMinimum > 0 ? $"Kalan dönem borcu · asgari {c.RemainingMinimum:N2} TL" : "Kalan dönem borcu"));
 
             var nextAmount = unbilled + futureByMonth.GetValueOrDefault(MonthIndex(nextDue));
             if (nextAmount > 0)
@@ -185,8 +185,9 @@ public static class Finance
             }
 
             cardViews.Add(new CardView(c,
-                c.Limit - c.CurrentBalance,
-                c.Limit > 0 ? Math.Round(100 * c.CurrentBalance / c.Limit, 1) : 0,
+                // Taksitli alışverişlerin tamamı limitten düşer.
+                c.Limit - c.CurrentBalance - futureTotal,
+                c.Limit > 0 ? Math.Round(100 * (c.CurrentBalance + futureTotal) / c.Limit, 1) : 0,
                 unbilled, lastStatement, due, isOverdue, nextStatement, nextDue,
                 futureTotal, c.CurrentBalance + futureTotal, instViews));
         }

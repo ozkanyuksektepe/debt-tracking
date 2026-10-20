@@ -13,6 +13,7 @@ src/DebtTracker/     .NET 10 Minimal API + EF Core SQLite  → http://localhost:
   Models.cs          Varlıklar: Loan, CreditCard, CardInstallment, OtherDebt, Account, Payment, Snapshot
   Finance.cs         Tüm hesaplamalar (kalan anapara, kart son ödeme tarihi, takvim kalemleri)
   Endpoints.cs       /api/* uçları, ödeme kaydı/geri alma, günlük snapshot
+  SchemaUpgrade.cs   Eski veritabanlarına yeni kolonları ekler (önce data/ içine yedek alır)
   data/borclar.db    Kullanıcının GERÇEK verisi (gitignore'da)
   wwwroot/           Boş tutulur; silinirse `dotnet watch` çöker
 web/                 Next.js 16 (App Router, TS, Tailwind 4)  → http://localhost:3000
@@ -55,10 +56,18 @@ Bu projede karşılaşılanlar:
 
 ## Veritabanı — dikkat
 
-Şema `Database.EnsureCreated()` ile oluşturuluyor, **migration yok**. Mevcut `borclar.db` yeni kolon/tablo
-almaz. Model değişikliği gerekiyorsa önce EF Core migration'larına geçişi planla ve kullanıcıya sor;
-aksi halde kullanıcının mevcut verisi uygulamayı bozar. Mümkünse şemayı değiştirmeden çöz
-(ör. banka seçici, banka adını mevcut `Bank` string alanında tutuyor).
+Şema `Database.EnsureCreated()` ile oluşturuluyor, EF migration'ı **yok**. EnsureCreated mevcut `borclar.db`'ye
+yeni kolon eklemez; bunun için `SchemaUpgrade.Run` kullanılır: `PRAGMA table_info` ile kolonu kontrol eder,
+yoksa önce `VACUUM INTO data/borclar-yedek-<tarih>.db` ile yedek alır, sonra `ALTER TABLE ... ADD COLUMN`
+ve gerekirse eski veriyi dönüştürür. Yeni kolon eklerken bu kalıbı izle, kullanıcıya önceden haber ver.
+Mümkünse şemayı değiştirmeden çöz (ör. banka seçici, banka adını mevcut `Bank` string alanında tutuyor).
+
+Kullanıcı uygulamayı `dotnet watch` ile açık tutuyorsa backend dosyası kaydedildiği an gerçek veritabanında
+çalışır. `start-dev.sh` hot reload'u kapatır (`--no-hot-reload`): hot reload yeni model alanlarını EF Core'a
+tanıtmaz ve kayıtlar sessizce eksik yazılır; yeniden başlatma şarttır. Betikler aynı porttan ikinci kopyayı
+başlatmaz ve çıkışta tüm süreç grubunu kapatır (dotnet watch TERM'i yok sayabilir). Test için başlattığın
+`dotnet watch` süreçlerini mutlaka kapat; sahipsiz kalanlar proje dosyalarını izlemeye devam eder. Şema değişikliklerini önce scratchpad'deki backend kopyasında, eski şemalı bir test veritabanıyla dene;
+doğrulandıktan sonra projeye kopyala.
 
 Decimal'ler SQLite'ta TEXT saklanır; sıralama/toplama SQL'de değil bellekte (`ToListAsync()` sonrası) yapılır.
 
@@ -67,12 +76,23 @@ Decimal'ler SQLite'ta TEXT saklanır; sıralama/toplama SQL'de değil bellekte (
 - **Kalan toplam ödeme ≠ kalan anapara.** Kalan anapara = kalan taksitlerin bugünkü değeri; oran, anapara +
   taksit + vadeden bisection ile bulunan fiili aylık maliyet (KKDF/BSMV dahil). `InterestRate` yalnızca bilgi.
 - Kredi taksiti k'nın tarihi = `FirstInstallmentDate + (k-1) ay`; `PaidInstallments`'tan sonrakiler ödenmemiş.
-- **Kart:** dönem borcu ≠ toplam borç. Son ödeme = son hesap kesiminden sonraki ilk `DueDay`.
+  `OpenedDate` (açılış, opsiyonel; eski kayıtlarda boş) ilk taksitten sonra olamaz.
+  `EndDate` = son taksit = `FirstInstallmentDate + (TermMonths-1) ay`; salt okunur, DB'de yok
+  (frontend formda aynısını `addMonthsIso` ile canlı hesaplar).
+- **Kart:** kullanıcı ekstre tutarını (`StatementBalance`, ödemeyle değişmez), asgariyi, bu dönem ödeneni
+  (`PaidAmount`) ve güncel toplam borcu (`CurrentBalance`) girer. Kayıtta dönem içi harcama türetilir:
+  `UnbilledAmount` = güncel − ekstre + ödenen (negatifse kayıt reddedilir). Ödeme kaydında `PaidAmount` artar,
+  `RecalculateBalance()` = max(0, ekstre + dönem içi − ödenen) ile güncel borç düşer.
+  `RemainingStatement`/`RemainingMinimum` salt okunur hesaplanan alanlar (JSON'da döner, DB'de yok).
+  "Ödeme yap" tutarı `PaidAmount`'a ekler. Kullanılabilir limit = limit − güncel borç − gelecek taksitler.
+  Son ödeme = son hesap kesiminden sonraki ilk `DueDay`; gecikme `RemainingStatement > 0` ise.
   Toplam kart borcu = `CurrentBalance` + henüz yansımamış taksitler (bir sonraki son ödeme ayı ve sonrası).
   Ay günleri `DayIn` ile kırpılır (31 → 30/28).
 - **Düzenli ödemeler** (`Kind = "Düzenli"`) toplam borca girmez (`CountsAsDebt = false`), takvim ve aylık yükte görünür.
 - **Ödeme kaydı** borcu ve seçilen hesabın bakiyesini değiştirir; geri alabilmek için delta alanları
   (`StatementDelta`, `CurrentDelta`, `MinimumDelta`, `RemainingDelta`, `InstallmentCount`) saklanır.
+  Kart ödemelerinde artık yalnızca `RemainingDelta` (= PaidAmount artışı) kullanılır; diğer kart deltaları
+  eski modelden kalan kayıtların geri alınabilmesi için desteklenir.
   Ödemeyi silmek etkisini geri çevirir. Yeni etki eklersen deltasını da sakla.
 - Geçmiş aylardan kalan ödenmemiş kalemler takvimde **bu aya** "gecikmiş" olarak taşınır (`GroupByMonth`).
 - `/overview` ve `/reports` her çağrıldığında günün `Snapshot`'ını günceller (zaman içindeki değişim grafiği).
@@ -87,5 +107,7 @@ Decimal'ler SQLite'ta TEXT saklanır; sıralama/toplama SQL'de değil bellekte (
   `ListRow`, `DateTile`, `DueBadge`, `Progress`. İkonlar `lucide-react`.
 - Grafikler `components/charts.tsx` içinde sunucuda üretilen SVG (kütüphane yok). Her grafiğe benzersiz `id` ver.
 - Sayı girişi Türkçe biçimde (`12.500,75`): `parseNum` (lib/format.ts). Para gösterimi `money()`.
+- Formda canlı hesaplanan salt okunur alan: `type: "computed"` + `compute(raw, initial)` (bkz. kart formu).
+- Ayın günü (1–31, her ay tekrarlanan) için `type: "day"`: takvimden seçtirir, yalnızca günü saklar (`DayPicker`).
 - Yeni kayıt türü/alan: `lib/forms.ts`'e alan, `lib/types.ts`'e tip, `actions.ts`'teki `RESOURCES` listesine kaynak ekle.
 - Banka eklemek: `lib/banks.ts` + isteğe bağlı `public/banks/<slug>.png`. Eski elle yazılmış adlar `aliases` ile eşleşir.

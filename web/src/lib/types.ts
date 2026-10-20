@@ -11,7 +11,11 @@ export type Loan = {
   interestRate: number;
   monthlyInstallment: number;
   termMonths: number;
+  /** Kredinin kullandırıldığı tarih; eski kayıtlarda boş olabilir. */
+  openedDate: string | null;
   firstInstallmentDate: string;
+  /** Son taksit tarihi (backend hesaplar). */
+  endDate: string | null;
   paidInstallments: number;
   notes: string | null;
 };
@@ -42,9 +46,17 @@ export type CreditCard = {
   name: string;
   bank: string | null;
   limit: number;
+  /** Ekstre tutarı (dönem borcu); ödeme yapıldıkça değişmez. */
   statementBalance: number;
+  /** Bu ekstreye ödenen toplam. */
+  paidAmount: number;
+  /** Ekstreden sonraki harcamalar; girilen güncel borçtan türetilir. */
+  unbilledAmount: number;
+  /** Kullanıcı girer; ödeme kaydında yeniden hesaplanır. */
   currentBalance: number;
   minimumPayment: number;
+  remainingStatement: number;
+  remainingMinimum: number;
   statementDay: number;
   dueDay: number;
   notes: string | null;

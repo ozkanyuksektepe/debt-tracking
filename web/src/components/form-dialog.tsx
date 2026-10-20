@@ -2,8 +2,10 @@
 
 import { X } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { NUM, parseNum } from "@/lib/format";
 import { BankSelect } from "./bank-select";
+import { DayPicker } from "./day-picker";
 import type { Field, FormValues } from "@/lib/forms";
 
 function toRaw(field: Field, value: unknown): string {
@@ -16,6 +18,7 @@ function toRaw(field: Field, value: unknown): string {
 function parseValues(fields: Field[], raw: Record<string, string>, visible: (f: Field) => boolean): FormValues {
   const out: FormValues = {};
   for (const f of fields) {
+    if (f.type === "computed") continue;
     const s = raw[f.name] ?? "";
     let v: unknown;
     switch (f.type) {
@@ -27,6 +30,7 @@ function parseValues(fields: Field[], raw: Record<string, string>, visible: (f: 
         break;
       }
       case "int":
+      case "day":
         v = s === "" ? (f.nullable ? null : 0) : parseInt(s, 10);
         break;
       case "date":
@@ -61,7 +65,7 @@ export function FormDialog({
   onClose: () => void;
 }) {
   const [raw, setRaw] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fields.map((f) => [f.name, toRaw(f, initial[f.name])])),
+    Object.fromEntries(fields.filter((f) => f.type !== "computed").map((f) => [f.name, toRaw(f, initial[f.name])])),
   );
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
@@ -97,7 +101,9 @@ export function FormDialog({
     });
   }
 
-  return (
+  // Pencere body'ye taşınır: transform/animasyon içeren bir kartın içinden açılsa bile
+  // "fixed" konumu o karta değil tüm ekrana göre hesaplanır.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 grid animate-fade place-items-end bg-black/40 backdrop-blur-sm sm:place-items-center sm:p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
@@ -123,12 +129,16 @@ export function FormDialog({
                 {f.label}
                 {f.required && " *"}
               </span>
-              <FieldInput
-                field={f}
-                value={raw[f.name] ?? ""}
-                onChange={(v) => setRaw((r) => ({ ...r, [f.name]: v }))}
-                inputRef={i === 0 ? firstInput : undefined}
-              />
+              {f.type === "computed" ? (
+                <ComputedValue result={f.compute!(raw, initial)} />
+              ) : (
+                <FieldInput
+                  field={f}
+                  value={raw[f.name] ?? ""}
+                  onChange={(v) => setRaw((r) => ({ ...r, [f.name]: v }))}
+                  inputRef={i === 0 ? firstInput : undefined}
+                />
+              )}
               {f.hint && <small className="text-xs text-muted">{f.hint}</small>}
             </label>
           ))}
@@ -147,6 +157,19 @@ export function FormDialog({
           </button>
         </div>
       </form>
+    </div>,
+    document.body,
+  );
+}
+
+/** Girilen değerlerden canlı hesaplanan, düzenlenemeyen alan. */
+function ComputedValue({ result }: { result: { value: string; tone?: "danger" | "ok" } }) {
+  return (
+    <div aria-live="polite"
+      className={`tabular flex min-h-[42px] items-center rounded-xl border border-dashed border-line px-3 text-[15px] font-semibold ${
+        result.tone === "danger" ? "text-danger" : result.tone === "ok" ? "text-success" : "text-fg"
+      }`}>
+      {result.value}
     </div>
   );
 }
@@ -169,6 +192,8 @@ function FieldInput({
     ref: inputRef as React.Ref<never>,
   };
   switch (f.type) {
+    case "day":
+      return <DayPicker value={value} onChange={onChange} />;
     case "bank":
       return <BankSelect value={value} onChange={onChange} />;
     case "select":

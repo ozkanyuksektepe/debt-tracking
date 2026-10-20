@@ -11,7 +11,11 @@ builder.Services.AddDbContext<AppDb>(o => o.UseSqlite($"Data Source={Path.Combin
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
-    scope.ServiceProvider.GetRequiredService<AppDb>().Database.EnsureCreated();
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+    db.Database.EnsureCreated();
+    SchemaUpgrade.Run(db, dataDir, app.Logger);
+}
 
 app.MapApi();
 

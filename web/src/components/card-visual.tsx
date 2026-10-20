@@ -42,7 +42,7 @@ export function CardVisual({ c }: { c: CardView }) {
               </div>
               <div className="mt-1.5 flex justify-between text-[11.5px] text-white/75">
                 <span>Limit %{NUM.format(c.utilizationPct)}</span>
-                <span>Son ödeme {x.statementBalance > 0 ? fmtDay(c.dueDate) : "—"}</span>
+                <span>Son ödeme {x.remainingStatement > 0 ? fmtDay(c.dueDate) : "—"}</span>
               </div>
             </div>
           )}

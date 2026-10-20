@@ -40,3 +40,12 @@ export function parseNum(input: string): number | null {
 export const kindColor = (kind: string) =>
   ({ Kredi: "var(--c1)", "Kredi kartı": "var(--c2)", "Kişisel borç": "var(--c3)", "Düzenli ödeme": "var(--c4)" })[kind] ??
   "var(--muted)";
+
+/** "YYYY-MM-DD" tarihine ay ekler; ay daha kısaysa son güne kırpar (C# AddMonths ile aynı). */
+export function addMonthsIso(iso: string, months: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const target = new Date(y, m - 1 + months, 1);
+  const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  const day = Math.min(d, last);
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}

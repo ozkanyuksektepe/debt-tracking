@@ -27,7 +27,7 @@ async function Dashboard() {
     })),
     ...d.cards.filter((c) => c.totalDebt > 0).map((c) => ({
       key: `c${c.card.id}`, title: c.card.name, bank: c.card.bank, href: "/kartlar", color: "var(--c2)",
-      meta: c.card.statementBalance > 0 ? `Son ödeme ${fmtDay(c.dueDate)}` : "Dönem borcu ödendi", amount: c.totalDebt, overdue: c.isOverdue,
+      meta: c.card.remainingStatement > 0 ? `Son ödeme ${fmtDay(c.dueDate)}` : "Dönem borcu ödendi", amount: c.totalDebt, overdue: c.isOverdue,
       progress: c.card.limit > 0 ? c.utilizationPct : null,
     })),
     ...d.others.filter((o) => o.debt.kind === "Borç" && o.debt.remainingAmount > 0).map((o) => ({

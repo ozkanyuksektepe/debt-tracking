@@ -1,4 +1,4 @@
-import { CalendarClock, Landmark, Percent, PiggyBank, Wallet } from "lucide-react";
+import { CalendarCheck, CalendarClock, CalendarPlus, Flag, Landmark, Percent, PiggyBank, Wallet, type LucideIcon } from "lucide-react";
 import { Suspense } from "react";
 import { BankLogo } from "@/components/bank-logo";
 import { DeleteButton, EntityFormButton } from "@/components/entity-buttons";
@@ -7,7 +7,7 @@ import { Badge, Card, Empty, Hint, Kpi, KpiGrid, PageHeader, PageSkeleton, Progr
 import { apiGet } from "@/lib/api";
 import { findBank } from "@/lib/banks";
 import { fmtDate, money, NUM } from "@/lib/format";
-import type { Overview } from "@/lib/types";
+import type { Loan, Overview } from "@/lib/types";
 
 export default function LoansPage() {
   return (
@@ -71,16 +71,15 @@ async function Loans() {
                     <Progress pct={l.progressPct} />
                   </div>
 
+                  <LoanDates loan={x} nextDueDate={l.nextDueDate} today={d.today} />
+
                   <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                     <Stat label="Aylık taksit">{money(x.monthlyInstallment)}</Stat>
-                    <Stat label="Sonraki taksit">{l.nextDueDate ? fmtDate(l.nextDueDate) : "—"}</Stat>
                     <Stat label="Kalan taksit">{l.remainingInstallments}</Stat>
+                    <Stat label="Çekilen tutar">{money(x.principal)}</Stat>
                     <Stat label="Tahmini kalan anapara">{money(l.remainingPrincipal)}</Stat>
                     <Stat label="Kalan faiz + vergi" tone={l.remainingInterest > 0 ? "danger" : undefined}>{money(l.remainingInterest)}</Stat>
-                    <Stat label="Fiili aylık maliyet">
-                      %{NUM.format(l.impliedMonthlyRatePct)}
-                      {x.interestRate > 0 && <span className="text-[12px] font-normal text-muted"> · akdi %{NUM.format(x.interestRate)}</span>}
-                    </Stat>
+                    <Stat label="Aylık faiz oranı">{x.interestRate > 0 ? `%${NUM.format(x.interestRate)}` : "—"}</Stat>
                   </div>
 
                   {x.notes && <div className="whitespace-pre-wrap rounded-2xl border border-dashed border-line px-3.5 py-2.5 text-[13px] text-muted">{x.notes}</div>}
@@ -91,7 +90,7 @@ async function Loans() {
                         target={{ type: "loan", id: x.id, name: x.name, amount: null, hint: "Boş bırakırsan taksit × adet" }} />
                     )}
                     <EntityFormButton resource="loans" values={x} label="Düzenle" small />
-                    <span className="ml-auto text-[12px] text-muted">Çekilen {money(x.principal)}</span>
+                    <span className="ml-auto" />
                     <DeleteButton resource="loans" id={x.id} name={x.name} iconOnly />
                   </div>
                 </Card>
@@ -112,5 +111,33 @@ async function Loans() {
         </Card>
       )}
     </>
+  );
+}
+
+/** Açılış → ilk taksit → sonraki taksit → bitiş. */
+function LoanDates({ loan, nextDueDate, today }: { loan: Loan; nextDueDate: string | null; today: string }) {
+  const steps: { label: string; date: string | null; icon: LucideIcon; highlight?: boolean; empty?: string }[] = [
+    { label: "Açılış", date: loan.openedDate, icon: CalendarPlus, empty: "Girilmedi" },
+    { label: "İlk taksit", date: loan.firstInstallmentDate, icon: CalendarCheck },
+    { label: "Sonraki taksit", date: nextDueDate, icon: CalendarClock, highlight: true, empty: "Kalmadı" },
+    { label: "Bitiş", date: loan.endDate, icon: Flag },
+  ];
+  return (
+    <ol className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      {steps.map(({ label, date, icon: Icon, highlight, empty }) => {
+        const overdue = highlight && date !== null && date < today;
+        return (
+          <li key={label}
+            className={`rounded-2xl border px-3.5 py-2.5 ${
+              overdue ? "border-danger/30 bg-danger-soft" : highlight && date ? "border-accent/40 bg-accent-soft" : "border-line"
+            }`}>
+            <div className="flex items-center gap-1.5 text-[12px] text-muted"><Icon className="size-3.5" />{label}</div>
+            <div className={`mt-0.5 text-[14px] font-semibold ${!date ? "font-normal text-muted" : overdue ? "text-danger" : highlight ? "text-accent" : ""}`}>
+              {date ? fmtDate(date) : empty}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
