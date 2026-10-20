@@ -1,6 +1,6 @@
 # Borç Takibi
 
-Tamamen MacBook'ta, internet olmadan çalışan kişisel borç ve ödeme takip uygulaması.
+Tamamen kişisel kullanım için geliştirilen, internet olmadan çalışan kişisel borç ve ödeme takip uygulaması.
 
 - **Backend:** ASP.NET Core (.NET 10) Minimal API — `src/DebtTracker` (http://localhost:5080)
 - **Veritabanı:** SQLite — `src/DebtTracker/data/borclar.db`
