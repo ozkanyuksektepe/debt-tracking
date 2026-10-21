@@ -123,7 +123,15 @@ public static class Endpoints
             string.IsNullOrWhiteSpace(o.Name) ? "Ad gerekli." :
             o.Kind == OtherKinds.Recurring && o.MonthlyAmount <= 0 ? "Düzenli ödeme için aylık tutar gerekli." : null);
         MapCrud<Account>(api, "/accounts", db => db.Accounts, a =>
-            string.IsNullOrWhiteSpace(a.Name) ? "Hesap adı gerekli." : null);
+        {
+            // Ad boşsa hesap türü ad olarak kullanılır (ör. "Artı Para").
+            if (string.IsNullOrWhiteSpace(a.Name)) a.Name = a.Type;
+            return string.IsNullOrWhiteSpace(a.Name) ? "Hesap türü ya da adı gerekli." :
+                   a.Limit < 0 || a.Quantity < 0 ? "Limit ve miktar eksi olamaz." : null;
+        });
+
+        // ---- Ekstre içe aktarma (yalnızca okur) ----
+        api.MapStatementImport();
 
         // ---- Ödemeler ----
         api.MapGet("/payments", async (AppDb db) =>

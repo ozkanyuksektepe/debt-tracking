@@ -1,7 +1,8 @@
 # Borç Takibi
 
 Tamamen yerelde (macOS) çalışan kişisel borç ve ödeme takip paneli. Tek kullanıcı, oturum açma yok,
-banka entegrasyonu yok; tüm veriyi kullanıcı elle girer. Uygulama internet olmadan çalışmalıdır:
+banka entegrasyonu yok; veriyi kullanıcı elle girer
+(kartlarda ek olarak bankadan indirdiği ekstre dosyasını içe aktarabilir). Uygulama internet olmadan çalışmalıdır:
 CDN, Google Fonts veya harici API ekleme.
 
 Arayüz metinleri **Türkçe**; kod, değişken ve dosya adları İngilizce. Para birimi TL, biçim `tr-TR`.
@@ -13,6 +14,7 @@ src/DebtTracker/     .NET 10 Minimal API + EF Core SQLite  → http://localhost:
   Models.cs          Varlıklar: Loan, CreditCard, CardInstallment, OtherDebt, Account, Payment, Snapshot
   Finance.cs         Tüm hesaplamalar (kalan anapara, kart son ödeme tarihi, takvim kalemleri)
   Endpoints.cs       /api/* uçları, ödeme kaydı/geri alma, günlük snapshot
+  StatementImport.cs Ekstre dosyası (PDF/xlsx/xls/CSV) okuma: POST /api/statements/parse, yalnızca okur
   SchemaUpgrade.cs   Eski veritabanlarına yeni kolonları ekler (önce data/ içine yedek alır)
   data/borclar.db    Kullanıcının GERÇEK verisi (gitignore'da)
   wwwroot/           Boş tutulur; silinirse `dotnet watch` çöker
@@ -22,7 +24,9 @@ web/                 Next.js 16 (App Router, TS, Tailwind 4)  → http://localho
   src/lib/actions.ts Server Action'lar (kaydet/sil/ödeme/geri al) + refresh()
   src/lib/forms.ts   Form alanı tanımları (FORMS[resource])
   src/lib/banks.ts   Türk bankaları listesi (ad, kısaltma, renk, alias)
+  src/lib/account-types.ts Bankaya göre hesap ürünleri ve KMH adları (hesap formundaki gruplu tür listesi)
   src/lib/types.ts   API yanıt tipleri (C# record'larıyla elle senkron)
+  src/components/    statement-import.tsx: önizle → onayla → kart PUT (saveEntity)
   src/components/    ui.tsx (Card, Kpi, Badge, Stat...), charts.tsx (SVG), form-dialog.tsx ...
   public/banks/      Banka logoları: <slug>.png (bazıları yok → renkli kısaltma gösterilir)
 start.sh             Production: API + `next build`/`next start`

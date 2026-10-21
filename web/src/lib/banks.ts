@@ -99,3 +99,17 @@ export function searchBanks(query: string): Bank[] {
   if (!q) return BANKS;
   return BANKS.filter((b) => [b.name, b.code, ...(b.aliases ?? [])].some((s) => normalize(s).includes(q)));
 }
+
+const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Serbest metinde (ör. ekstre) en çok geçen bankayı bulur. Tam ad, kısa adlardan (ör. "bonus") daha ağır sayılır. */
+export function detectBank(text: string): Bank | undefined {
+  const t = normalize(text);
+  const count = (s: string) => t.match(new RegExp(`(^|[^a-z0-9])${escapeRx(normalize(s))}(?![a-z0-9])`, "g"))?.length ?? 0;
+  let best: { bank: Bank; score: number } | undefined;
+  for (const bank of BANKS) {
+    const score = 3 * count(bank.name) + (bank.aliases ?? []).reduce((s, a) => s + count(a), 0);
+    if (score > 0 && (!best || score > best.score)) best = { bank, score };
+  }
+  return best?.bank;
+}

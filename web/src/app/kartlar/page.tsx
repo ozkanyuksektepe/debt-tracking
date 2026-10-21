@@ -3,10 +3,11 @@ import { Suspense } from "react";
 import { CardVisual } from "@/components/card-visual";
 import { DeleteButton, EntityFormButton } from "@/components/entity-buttons";
 import { PayButton } from "@/components/payment-buttons";
+import { StatementImportButton, type CardPayment } from "@/components/statement-import";
 import { Badge, Card, DueBadge, Empty, Hint, Kpi, KpiGrid, PageHeader, PageSkeleton, Stat } from "@/components/ui";
 import { apiGet } from "@/lib/api";
 import { fmtDate, money } from "@/lib/format";
-import type { CardView, Overview } from "@/lib/types";
+import type { CardView, Overview, Payment } from "@/lib/types";
 
 export default function CardsPage() {
   return (
@@ -22,7 +23,10 @@ export default function CardsPage() {
 }
 
 async function Cards() {
-  const d = await apiGet<Overview>("/overview");
+  const [d, allPayments] = await Promise.all([apiGet<Overview>("/overview"), apiGet<Payment[]>("/payments")]);
+  const cardPayments: CardPayment[] = allPayments
+    .filter((p) => p.targetType === "card")
+    .map((p) => ({ targetId: p.targetId, date: p.date, amount: p.amount }));
   const totalLimit = d.cards.reduce((s, c) => s + c.card.limit, 0);
   const available = d.cards.reduce((s, c) => s + Math.max(0, c.availableLimit), 0);
 
@@ -120,6 +124,7 @@ async function Cards() {
                           }} />
                       )}
                       <EntityFormButton resource="cards" values={{ ...x, futureInstallmentsTotal: c.futureInstallmentsTotal }} label="Ekstreyi güncelle" small />
+                      <StatementImportButton cardId={x.id} cards={d.cards} payments={cardPayments} />
                       <span className="ml-auto" />
                       <DeleteButton resource="cards" id={x.id} name={x.name} iconOnly />
                     </div>
@@ -132,6 +137,7 @@ async function Cards() {
             Dönem içi harcama, girdiğin güncel toplam borçtan; kullanılabilir limit de limit ve güncel borçtan otomatik hesaplanır.
             &quot;Ödeme yap&quot; ile kaydettiğin ödemeler &quot;bu dönem ödenen&quot;e eklenir ve güncel borcu düşürür.
             Yeni ekstre kesildiğinde &quot;Ekstreyi güncelle&quot; ile yeni dönem borcunu ve asgariyi gir, ödeneni sıfırla, güncel borcu bankadaki değerle güncelle.
+            Ya da &quot;Ekstre yükle&quot; ile bankadan indirdiğin PDF, Excel veya CSV ekstreyi seç: değerler okunur, kontrol edip onaylayınca kart güncellenir.
             Kullanılabilir limitten taksitli alışverişlerin kalan tutarı da düşülür.
           </Hint>
         </>

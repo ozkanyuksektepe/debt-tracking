@@ -34,3 +34,15 @@ export async function apiSend(
     return { error: "Backend'e ulaşılamadı. .NET API çalışıyor mu?" };
   }
 }
+
+/** Dosya (multipart) gönderir; yanıt gövdesini hata durumunda da döndürür. */
+export async function apiUpload<T>(path: string, body: FormData): Promise<{ data?: T; error?: string }> {
+  try {
+    const res = await fetch(`${BASE}/api${path}`, { method: "POST", body, cache: "no-store" });
+    const json = await res.json().catch(() => null);
+    if (res.ok) return { data: json as T };
+    return { data: json ?? undefined, error: json?.error ?? json?.title ?? `İstek başarısız (${res.status})` };
+  } catch {
+    return { error: "Backend'e ulaşılamadı. .NET API çalışıyor mu?" };
+  }
+}

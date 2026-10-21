@@ -107,8 +107,18 @@ export type OtherView = {
 export type Account = {
   id: number;
   name: string;
+  bank: string | null;
+  /** Bankanın ürün adı ("Artı Para"...) ya da genel tür ("Nakit"); grubu lib/account-types.ts bulur. */
   type: string;
+  /** Güncel bakiye; KMH'de eksi değer kullanılan tutar. */
   balance: number;
+  /** KMH limiti. */
+  limit: number;
+  /** % — KMH'de aylık, vadeli/günlük hesapta yıllık. */
+  interestRate: number;
+  maturityDate: string | null;
+  /** Altın/maden miktarı (gram). */
+  quantity: number;
   notes: string | null;
 };
 
@@ -176,4 +186,21 @@ export type Payment = {
   accountId: number | null;
   installmentCount: number;
   note: string | null;
+};
+
+/** Ekstreden okunan değer ve ekstrede bulunduğu satır. */
+export type Found<T> = { value: T; line: string };
+
+/** /statements/parse yanıtı: ekstre dosyasından çıkarılan özet (kaydedilmez). */
+export type ParsedStatement = {
+  fileName: string;
+  text: string;
+  statementBalance: Found<number> | null;
+  minimumPayment: Found<number> | null;
+  statementDate: Found<string> | null;
+  dueDate: Found<string> | null;
+  limit: Found<number> | null;
+  cardLast4: string | null;
+  /** Ekstre dönemi içindeki ödemeler; dönem borcundan zaten düşülmüş, yalnızca bilgi. */
+  periodPayments: Found<number> | null;
 };

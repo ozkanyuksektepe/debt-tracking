@@ -1,5 +1,6 @@
 // Form alanı tanımları. İstemci bileşenlerinde kullanılır (show fonksiyonları sunucudan gönderilemez).
 import type { Resource } from "./actions";
+import { accountKind, accountTypeGroups, type AccountKind } from "./account-types";
 import { addMonthsIso, fmtDate, money, parseNum } from "./format";
 
 export type FormValues = Record<string, unknown>;
@@ -16,7 +17,14 @@ export type Field = {
   min?: number;
   max?: number;
   options?: [string, string][];
-  /** Ham form değerlerine göre alanın görünüp görünmeyeceği. */
+  /** "select": diğer alanlara göre değişen, gruplu seçenekler (options yerine). */
+  groups?: (raw: Record<string, string>) => { group: string; options: [string, string][] }[];
+  /** Bu alan değişince, seçili değer yeni seçeneklerde yoksa temizlenir. */
+  dependsOn?: string;
+  /** Diğer alanlara göre değişen etiket/ipucu (ör. hesap türüne göre "Esnek Hesap limiti"). */
+  labelFor?: (raw: Record<string, string>) => string;
+  hintFor?: (raw: Record<string, string>) => string | undefined;
+  /** Ham form değerlerine göre alanın görünüp görünmeyeceği. Gizli alanlar boş/0 kaydedilir. */
   show?: (raw: Record<string, string>) => boolean;
   /** "computed" alanlar: girilen değerlerden canlı hesaplanır, kaydedilmez. */
   compute?: (raw: Record<string, string>, initial: FormValues) => { value: string; tone?: "danger" | "ok" };
@@ -108,10 +116,49 @@ const otherFields: Field[] = [
   { name: "notes", label: "Notlar", type: "textarea", full: true, nullable: true },
 ];
 
+const kindOf = (r: Record<string, string>) => accountKind(r.type ?? "");
+const kindIs = (...kinds: AccountKind[]) => (r: Record<string, string>) => !!r.type && kinds.includes(kindOf(r));
+
 const accountFields: Field[] = [
-  { name: "name", label: "Hesap adı", required: true, placeholder: "Örn. Ziraat vadesiz", full: true },
-  { name: "type", label: "Tür", type: "select", options: opts("Banka", "Nakit", "Birikim", "Diğer") },
-  { name: "balance", label: "Bakiye", type: "money" },
+  { name: "bank", label: "Banka", type: "bank", nullable: true, hint: "Nakit için boş bırak" },
+  {
+    name: "type", label: "Hesap türü", type: "select", required: true, dependsOn: "bank",
+    groups: (r) => accountTypeGroups(r.bank), hint: "Seçilen bankanın hesapları ve kredili mevduat hesabı",
+  },
+  { name: "name", label: "Hesap adı", nullable: true, placeholder: "Boş bırakırsan hesap türü kullanılır", full: true },
+  {
+    name: "balance", label: "Bakiye", type: "money",
+    labelFor: (r) => ({ KMH: "Güncel bakiye", Vadeli: "Anapara", Altın: "TL karşılığı" } as Partial<Record<AccountKind, string>>)[kindOf(r)] ?? "Bakiye",
+    hintFor: (r) => ({
+      KMH: "Bankanın gösterdiği bakiye; eksi (−) ise o kadar kullanmışsın",
+      Altın: "Altının bugünkü TL değeri",
+      Vadeli: "Vadeye yatırdığın tutar",
+    } as Partial<Record<AccountKind, string>>)[kindOf(r)],
+  },
+  // KMH
+  { name: "limit", label: "Limit", type: "money", show: kindIs("KMH"), labelFor: (r) => `${r.type} limiti` },
+  {
+    name: "available", label: "Kullanılabilir bakiye", type: "computed", show: kindIs("KMH"),
+    hint: "Limit + güncel bakiye",
+    compute: (r) => {
+      const v = num(r, "limit") + num(r, "balance");
+      return { value: money(v), tone: v < 0 ? "danger" : "ok" };
+    },
+  },
+  // Faiz: KMH'de aylık, vadeli ve günlük faizli hesapta yıllık
+  {
+    name: "interestRate", label: "Faiz oranı (%)", type: "percent", show: kindIs("KMH", "Vadeli", "Günlük"),
+    labelFor: (r) => (kindOf(r) === "KMH" ? "Aylık faiz oranı (%)" : "Yıllık faiz oranı (%)"),
+    placeholder: "Örn. 4,25", hint: "Bilgi amaçlı",
+  },
+  { name: "maturityDate", label: "Vade sonu", type: "date", show: kindIs("Vadeli") },
+  {
+    name: "dailyReturn", label: "Tahmini günlük getiri (brüt)", type: "computed", show: kindIs("Günlük"),
+    hint: "Bakiye × yıllık faiz ÷ 365, stopaj hariç",
+    compute: (r) => ({ value: money((num(r, "balance") * num(r, "interestRate")) / 100 / 365) }),
+  },
+  // Altın
+  { name: "quantity", label: "Miktar (gram)", type: "percent", show: kindIs("Altın"), placeholder: "Örn. 12,5" },
   { name: "notes", label: "Notlar", type: "textarea", full: true, nullable: true },
 ];
 

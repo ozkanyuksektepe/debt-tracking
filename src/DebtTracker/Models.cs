@@ -95,8 +95,19 @@ public class Account : IEntity
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string? Bank { get; set; }
+    /// <summary>Hesap türü: bankanın ürün adı ("Yanımda Mevduat Hesabı", "Artı Para"...) ya da genel tür ("Nakit", "Banka"...).</summary>
     public string Type { get; set; } = "Banka";
+    /// <summary>Güncel bakiye; KMH'de eksi değer kullanılan tutardır.</summary>
     public decimal Balance { get; set; }
+    /// <summary>KMH limiti.</summary>
+    public decimal Limit { get; set; }
+    /// <summary>Faiz oranı (%): KMH'de aylık, vadeli/günlük hesapta yıllık. Bilgi amaçlı.</summary>
+    public decimal InterestRate { get; set; }
+    /// <summary>Vadeli hesabın vade sonu.</summary>
+    public DateOnly? MaturityDate { get; set; }
+    /// <summary>Altın/kıymetli maden miktarı (gram).</summary>
+    public decimal Quantity { get; set; }
     public string? Notes { get; set; }
 }
 

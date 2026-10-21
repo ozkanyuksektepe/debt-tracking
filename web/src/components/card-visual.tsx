@@ -33,8 +33,8 @@ export function CardVisual({ c }: { c: CardView }) {
         </div>
 
         <div className="mt-auto">
-          <div className="text-[11.5px] uppercase tracking-wider text-white/65">Güncel borç</div>
-          <div className="tabular text-[26px] font-bold tracking-tight">{money(x.currentBalance)}</div>
+          <div className="text-[11.5px] uppercase tracking-wider text-white/65">Kalan dönem borcu</div>
+          <div className="tabular text-[26px] font-bold tracking-tight">{money(x.remainingStatement)}</div>
           {x.limit > 0 && (
             <div className="mt-2.5">
               <div className="h-1.5 overflow-hidden rounded-full bg-white/20">

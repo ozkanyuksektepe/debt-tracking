@@ -42,7 +42,8 @@ function parseValues(fields: Field[], raw: Record<string, string>, visible: (f: 
       default:
         v = s.trim() || (f.nullable ? null : "");
     }
-    if (f.required && visible(f) && (v === null || v === "")) throw new Error(`"${f.label}" alanı gerekli.`);
+    if (!visible(f)) v = f.nullable || f.type === "date" || f.type === "month" ? null : f.type === "money" || f.type === "percent" || f.type === "int" || f.type === "day" ? 0 : "";
+    else if (f.required && (v === null || v === "")) throw new Error(`"${f.label}" alanı gerekli.`);
     out[f.name] = v;
   }
   return out;
@@ -126,7 +127,7 @@ export function FormDialog({
           {fields.filter(visible).map((f, i) => (
             <label key={f.name} className={`flex flex-col gap-1 ${f.full ? "sm:col-span-2" : ""}`}>
               <span className="text-[13px] font-medium text-muted">
-                {f.label}
+                {f.labelFor?.(raw) ?? f.label}
                 {f.required && " *"}
               </span>
               {f.type === "computed" ? (
@@ -135,11 +136,12 @@ export function FormDialog({
                 <FieldInput
                   field={f}
                   value={raw[f.name] ?? ""}
-                  onChange={(v) => setRaw((r) => ({ ...r, [f.name]: v }))}
+                  raw={raw}
+                  onChange={(v) => setRaw((r) => withDependents(fields, { ...r, [f.name]: v }, f.name))}
                   inputRef={i === 0 ? firstInput : undefined}
                 />
               )}
-              {f.hint && <small className="text-xs text-muted">{f.hint}</small>}
+              {(f.hintFor?.(raw) ?? f.hint) && <small className="text-xs text-muted">{f.hintFor?.(raw) ?? f.hint}</small>}
             </label>
           ))}
         </div>
@@ -162,6 +164,16 @@ export function FormDialog({
   );
 }
 
+/** Değişen alana bağlı gruplu seçimlerde, artık seçeneklerde olmayan değeri temizler (ör. banka değişince hesap türü). */
+function withDependents(fields: Field[], raw: Record<string, string>, changed: string) {
+  const next = { ...raw };
+  for (const f of fields) {
+    if (f.dependsOn !== changed || !f.groups || !next[f.name]) continue;
+    if (!f.groups(next).some((g) => g.options.some(([v]) => v === next[f.name]))) next[f.name] = "";
+  }
+  return next;
+}
+
 /** Girilen değerlerden canlı hesaplanan, düzenlenemeyen alan. */
 function ComputedValue({ result }: { result: { value: string; tone?: "danger" | "ok" } }) {
   return (
@@ -177,11 +189,13 @@ function ComputedValue({ result }: { result: { value: string; tone?: "danger" | 
 function FieldInput({
   field: f,
   value,
+  raw,
   onChange,
   inputRef,
 }: {
   field: Field;
   value: string;
+  raw: Record<string, string>;
   onChange: (v: string) => void;
   inputRef?: React.RefObject<HTMLElement | null>;
 }) {
@@ -197,6 +211,22 @@ function FieldInput({
     case "bank":
       return <BankSelect value={value} onChange={onChange} />;
     case "select":
+      if (f.groups) {
+        const groups = f.groups(raw);
+        const known = groups.some((g) => g.options.some(([v]) => v === value));
+        return (
+          <select {...common} onChange={(e) => onChange(e.target.value)}>
+            {!value && <option value="">Seç…</option>}
+            {/* Listede olmayan eski değer kaybolmasın */}
+            {value && !known && <option value={value}>{value}</option>}
+            {groups.map((g) => (
+              <optgroup key={g.group} label={g.group}>
+                {g.options.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        );
+      }
       return (
         <select {...common} onChange={(e) => onChange(e.target.value)}>
           {f.options!.map(([val, label]) => (

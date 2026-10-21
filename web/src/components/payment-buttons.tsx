@@ -3,6 +3,7 @@
 import { Check, Undo2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { recordPayment, undoPayment } from "@/lib/actions";
+import { findBank } from "@/lib/banks";
 import type { Field } from "@/lib/forms";
 import { money, todayIso } from "@/lib/format";
 import type { Account, TargetType } from "@/lib/types";
@@ -38,7 +39,8 @@ export function PayButton({
     { name: "date", label: "Ödeme tarihi", type: "date", required: true },
     {
       name: "accountId", label: "Hangi hesaptan?", type: "select", full: true,
-      options: [["", "Hesaptan düşme"], ...accounts.map((a): [string, string] => [String(a.id), `${a.name} · ${money(a.balance)}`])],
+      options: [["", "Hesaptan düşme"], ...accounts.map((a): [string, string] =>
+        [String(a.id), [findBank(a.bank)?.name ?? a.bank, a.name, money(a.balance)].filter(Boolean).join(" · ")])],
     },
     { name: "note", label: "Not", nullable: true, full: true },
   ];
